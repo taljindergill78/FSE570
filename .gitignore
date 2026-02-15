@@ -1,0 +1,17 @@
+.DS_Store
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Environment variables (never commit real credentials)
+.env
+
+# Data (keep raw/processed out of git by default)
+data/raw/
+data/processed/
+# ...but keep the folder structure visible on GitHub
+!data/raw/**/.gitkeep
+!data/processed/**/.gitkeep
+
