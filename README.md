@@ -2,6 +2,10 @@
 
 This repository is the implementation for **Autonomous OSINT Investigation Swarm** — a modular, multi-agent system for corporate/entity risk assessment.
 
+## Architecture
+
+![Autonomous OSINT Investigation Swarm architecture](Architecture Diagram.jpeg)
+
 ## Quickstart
 
 ```bash
