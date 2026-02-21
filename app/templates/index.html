@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Investigate — OSINT Swarm{% endblock %}
+{% block content %}
+<div class="card">
+    <h1>Autonomous OSINT Investigation Swarm</h1>
+    <p class="meta">Enter an investigation query. Example: <em>Investigate Tesla for money laundering</em></p>
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="/">
+        <label for="query">Investigation query</label>
+        <input type="text" id="query" name="query" placeholder="e.g. Investigate Company X for money laundering" value="{{ request.form.query or '' }}" autofocus>
+        <button type="submit">Run investigation</button>
+    </form>
+</div>
+{% endblock %}

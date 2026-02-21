@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Results — OSINT Swarm{% endblock %}
+{% block content %}
+<div class="card">
+    <h1>Investigation results</h1>
+    <p><a href="/">&larr; New query</a></p>
+</div>
+
+{% if result.error %}
+<div class="card">
+    <div class="error"><strong>Pipeline error:</strong> {{ result.error }}</div>
+</div>
+{% else %}
+
+<div class="card">
+    <h2>Query &amp; entity</h2>
+    <p><strong>Query:</strong> {{ result.query }}</p>
+    {% if result.entity_id %}
+    <p><strong>Entity:</strong> {{ result.entity_name or result.entity_id }} <code>{{ result.entity_id }}</code></p>
+    {% else %}
+    <p><strong>Entity:</strong> <em>No entity resolved for this query.</em></p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Tasks &amp; findings</h2>
+    <p><strong>Tasks:</strong> {{ result.tasks | length }}</p>
+    <ul>
+    {% for t in result.tasks %}
+        <li>{{ t.task_type }} &rarr; {{ t.target_agent }}</li>
+    {% endfor %}
+    </ul>
+    <p><strong>Total findings:</strong> {{ result.findings_count }}</p>
+    <p><strong>By agent:</strong> {{ result.findings_by_agent }}</p>
+</div>
+
+<div class="card">
+    <h2>Risk dashboard</h2>
+    <pre>{{ result.risk_dashboard_cli }}</pre>
+</div>
+
+{% if result.gaps %}
+<div class="card">
+    <h2>Gaps (missing data)</h2>
+    <ul>
+    {% for g in result.gaps %}
+        <li><strong>{{ g.area }}</strong>: {{ g.description }}{% if g.suggested_follow_up %} — {{ g.suggested_follow_up }}{% endif %}</li>
+    {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if result.conflicts %}
+<div class="card">
+    <h2>Cross-check conflicts</h2>
+    <ul>
+    {% for c in result.conflicts %}
+        <li>{{ c.description }}</li>
+    {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Evidence report</h2>
+    <div class="report-embed">
+        {{ result.report_body | safe }}
+    </div>
+</div>
+
+<div class="card">
+    <h2>Audit trail</h2>
+    <pre>{% for e in result.audit_events %}{{ e.get('timestamp', '') }}  {{ e.get('step', '') }}{% if e.get('query') %}  query={{ e.get('query')[:50] }}{% endif %}{% if e.get('entity_resolved') is not none %}  entity_resolved={{ e.get('entity_resolved') }}{% endif %}{% if e.get('task_count') is not none %}  task_count={{ e.get('task_count') }}{% endif %}
+{% endfor %}</pre>
+</div>
+
+{% endif %}
+{% endblock %}

@@ -1,103 +1,94 @@
 # Implementation Plan: Autonomous OSINT Investigation Swarm
 
-This plan is derived from the **Autonomous OSINT Investigation Swarm** project description (PDF), the **Architecture Diagram**, and the **current progress** in the repo. Items are ordered so that each step builds on the previous one.
+This document describes the **phase-wise implementation plan** for the Autonomous OSINT Investigation Swarm, derived from the project description (PDF) and the Architecture Diagram. Each phase builds on the previous one.
 
 ---
 
-## Current State Summary
+## Phase 1: Data Infrastructure
 
-**Done (Phase 1 – Data Infrastructure):**
-
-- **Schemas**: `Entity` and `Evidence` in [`src/osint_swarm/entities.py`](src/osint_swarm/entities.py) with `entity_id`, `source_type`, `risk_category`, `confidence`, etc.
-- **Data connectors**: SEC EDGAR (submissions) and NHTSA (recalls via DOT DataHub) in `src/osint_swarm/data_sources/`.
-- **Scripts**: `pull_sec_submissions.py`, `pull_nhtsa_recalls.py`, `build_evidence_tesla.py` producing `data/processed/tesla/evidence_tesla.csv` (91 rows).
-- **Directory structure**: `agents/`, `mcp_layer/`, `reflexion_layer/`, `knowledge_graph/`, `output_layer/`, plus `data/raw/*` and `data/processed/` with `__init__.py` in place.
-
-**Not yet implemented:**
-
-- Lead Agent (orchestrator, task decomposition, context).
-- Specialist agents (Corporate, Legal, Social Graph).
-- MCP integration layer (unified data access).
-- Reflexion (self-correction, gap detection, confidence).
-- Knowledge graph and output layer (dashboard, evidence report, audit trail).
-- End-to-end demo (“Investigate Company X for money laundering”).
-
----
-
-## Phased Plan (What to Do, One by One)
-
-### Phase 2: Data Layer & MCP Alignment
-
-**Goal:** Treat existing connectors as the canonical data backbone and align them with the MCP/data layer so agents depend on a single interface.
+**Goal:** Establish the foundation: schemas, data connectors, and a scripted pipeline that pulls raw data from trusted sources, caches it, and produces structured Evidence for downstream consumers.
 
 | # | Task | Description |
 |---|------|-------------|
-| 2.1 | **MCP-style interface for existing sources** | Define a small, shared interface (e.g. “fetch by entity/query”) in `mcp_layer/` that the current SEC and NHTSA connectors implement (or wrap). No need for full MCP servers initially—just a clear contract so Lead Agent and specialists call “MCP” instead of raw APIs. |
-| 2.2 | **Wire SEC EDGAR and NHTSA into MCP layer** | Implement or adapt `mcp_layer/sec_edgar_processor/` and add an NHTSA processor (or single “regulatory” processor) that use `src/osint_swarm/data_sources/` under the hood. Evidence continues to be produced in the same format as today. |
-| 2.3 | **Evidence as canonical agent input** | Document and enforce that agents consume structured evidence (e.g. `data/processed/<entity>/evidence_*.csv` or an in-memory list of `Evidence`) rather than raw JSON. Optional: add a tiny “evidence loader” used by all agents. |
+| 1.1 | **Schemas** | Define `Entity` and `Evidence` in `src/osint_swarm/entities.py`: entity_id, name, entity_type, identifiers; evidence_id, entity_id, date, source_type, risk_category, summary, source_uri, raw_location, confidence, attributes. |
+| 1.2 | **Data connectors** | Implement SEC EDGAR connector (fetch submissions by CIK, cache JSON) and NHTSA connector (fetch recalls by make via DOT DataHub, cache JSON) in `src/osint_swarm/data_sources/`. |
+| 1.3 | **Scripts** | Provide runnable scripts: pull SEC submissions and NHTSA recalls into `data/raw/`; build Evidence from raw data and write CSV to `data/processed/`. |
+| 1.4 | **Utilities and layout** | I/O helpers (read_json, write_json, write_csv_dicts) and a directory layout that matches the architecture (agents, mcp_layer, reflexion_layer, knowledge_graph, output_layer, data/raw, data/processed). |
 
 ---
 
-### Phase 3: Lead Agent (Orchestrator)
+## Phase 2: Data Layer & MCP Alignment
 
-**Goal:** One entry point that turns a natural-language investigation query into sub-tasks and delegates to specialist agents.
+**Goal:** Expose a single, consistent interface (MCP-style) for data access so that agents depend on the data layer rather than calling connectors or scripts directly. Evidence is the canonical input for all agents.
 
 | # | Task | Description |
 |---|------|-------------|
-| 3.1 | **Entity resolution** | Implement `agents/lead_agent/entity_resolution/`: given a query like “Company X” or “Tesla”, resolve to an `Entity` (or list of candidates) with `entity_id`, `identifiers` (e.g. CIK), `entity_type`. Can start with a lookup table or simple rules (e.g. Tesla → CIK 0001318605). |
-| 3.2 | **Task planner (decomposition)** | Implement `agents/lead_agent/task_planner/`: Chain-of-Thought style decomposition of “Investigate X for money laundering” into sub-tasks: corporate structure, beneficial ownership, sanctions, transaction patterns, adverse media. Output: a list of (task_type, target_agent, description). |
-| 3.3 | **Context manager** | Implement `agents/lead_agent/context_manager/`: holds the current investigation context (entity, query, sub-tasks, results per agent). Provides a single place to read/write “findings so far” so that reflexion and specialists can use it. |
-| 3.4 | **Lead Agent orchestration** | Tie 3.1–3.3 together: accept a query → resolve entity → decompose into tasks → allocate to Corporate / Legal / Social Graph agents (stubs if needed) → collect results into context. |
+| 2.1 | **MCP-style interface** | Define a shared contract in `mcp_layer/` (e.g. abstract processor with `get_evidence_for_entity(entity)` returning `List[Evidence]`). Document that agents must use the MCP layer, not `osint_swarm.data_sources` directly. |
+| 2.2 | **Wire SEC and NHTSA into MCP layer** | Implement `mcp_layer/sec_edgar_processor/` and an NHTSA processor that use existing connectors, read from or write to `data/raw/`, and return `List[Evidence]`. |
+| 2.3 | **Evidence as canonical input** | Document that agents consume structured Evidence (from MCP or from an evidence store). Optionally add an evidence loader that loads `data/processed/<entity>/evidence_*.csv` and returns `List[Evidence]`. |
 
 ---
 
-### Phase 4: Specialist Agents (Minimal Viable)
+## Phase 3: Lead Agent (Orchestrator)
 
-**Goal:** Each specialist can consume evidence (and later MCP) and return structured findings. Start with what the current data supports; extend later.
+**Goal:** One entry point that accepts a natural-language investigation query, resolves the entity, decomposes the query into sub-tasks, and delegates to specialist agents.
 
 | # | Task | Description |
 |---|------|-------------|
-| 4.1 | **Corporate Agent** | **SEC Analyzer** (`agents/specialist_agents/corporate_agent/sec_analyzer/`): ingest SEC-derived evidence (from CSV or evidence loader); summarize governance/regulatory red flags (e.g. executive turnover, filings). **Structure Mapper**: stub or simple pass-through; later OpenCorporates when available. |
-| 4.2 | **Legal Agent** | **Sanctions Screener** (`agents/specialist_agents/legal_agent/sanctions_screener/`): stub that returns “no sanctions data yet” or integrate a free OFAC/sanctions list if feasible. **PACER Analyzer**: stub or placeholder (PACER paywalled; CourtListener optional later). |
-| 4.3 | **Social Graph Agent** | **GNN Analyzer** and **Influence Mapper**: stubs that return “no social graph data yet” (Twitter/LinkedIn noted as future). Keeps the architecture intact for the demo. |
-| 4.4 | **Agent contract** | Define a common interface for specialists: e.g. `run(entity_id, task_description, context) -> List[Evidence]` (or a small “Finding” type). Lead Agent calls this for each allocated task. |
+| 3.1 | **Entity resolution** | Implement `agents/lead_agent/entity_resolution/`: given a query (e.g. “Company X”, “Tesla”), resolve to an `Entity` with entity_id, identifiers (e.g. CIK), entity_type. Start with a lookup table or simple rules. |
+| 3.2 | **Task planner** | Implement `agents/lead_agent/task_planner/`: decompose queries (e.g. “Investigate X for money laundering”) into sub-tasks: corporate structure, beneficial ownership, sanctions, transaction patterns, adverse media. Output: list of (task_type, target_agent, description). |
+| 3.3 | **Context manager** | Implement `agents/lead_agent/context_manager/`: hold investigation context (entity, query, sub-tasks, results per agent) so reflexion and specialists can read/write findings in one place. |
+| 3.4 | **Lead Agent orchestration** | Tie entity resolution, task planner, and context manager together: accept query → resolve entity → decompose → allocate tasks to Corporate / Legal / Social Graph agents → collect results into context. |
 
 ---
 
-### Phase 5: Reflexion & Quality Assurance
+## Phase 4: Specialist Agents (Minimal Viable)
 
-**Goal:** Self-correction and transparency as in the PDF: gap detection, confidence, audit trail.
+**Goal:** Each specialist consumes evidence (via MCP or context) and returns structured findings. Start with what the current data supports; use stubs where data is not yet integrated.
 
 | # | Task | Description |
 |---|------|-------------|
-| 5.1 | **Cross-check** | Implement `reflexion_layer/cross_check/`: compare findings from different agents for consistency (e.g. same executive name, same date). Flag conflicts. |
-| 5.2 | **Gap detection** | Implement `reflexion_layer/gap_detection/`: given investigation objectives and current findings, list missing pieces (e.g. “no sanctions check”, “no PACER data”). Optionally output “suggested follow-up queries” for the Lead Agent. |
-| 5.3 | **Confidence module** | Implement `reflexion_layer/confidence_module/`: aggregate confidence from evidence (already in schema); optionally adjust by source reliability and corroboration. Expose a per-finding or per-dimension confidence score. |
-| 5.4 | **Audit trail** | Implement `output_layer/audit_trail/`: log every query, data source accessed, and reasoning step (e.g. in JSON or structured log). Ensures chain of custody for “forensic-style” evidence. |
+| 4.1 | **Corporate Agent** | SEC Analyzer: ingest SEC-derived evidence, summarize governance/regulatory red flags (e.g. executive turnover, filings). Structure Mapper: stub or pass-through; later OpenCorporates. |
+| 4.2 | **Legal Agent** | Sanctions Screener: stub or integrate OFAC/sanctions list. PACER Analyzer: stub (PACER paywalled; CourtListener optional later). |
+| 4.3 | **Social Graph Agent** | GNN Analyzer and Influence Mapper: stubs (Twitter/LinkedIn noted as future). |
+| 4.4 | **Agent contract** | Define a common interface for specialists (e.g. `run(entity, task, context) -> List[Evidence]`). Lead Agent calls this for each allocated task. |
 
 ---
 
-### Phase 6: Knowledge Graph & Output Layer
+## Phase 5: Reflexion & Quality Assurance
 
-**Goal:** Turn verified findings into a graph and then into reports and a simple dashboard.
+**Goal:** Self-correction and transparency: cross-check findings, detect gaps, aggregate confidence, and maintain an audit trail.
 
 | # | Task | Description |
 |---|------|-------------|
-| 6.1 | **Knowledge graph** | Implement `knowledge_graph/`: build an in-memory (or simple persisted) graph from evidence—nodes = entities/documents, edges = relationships (e.g. “mentioned in same filing”, “same recall”). Feed from reflexion “verified findings.” |
-| 6.2 | **Evidence report generator** | Implement `output_layer/evidence_report_generator/`: from evidence + knowledge graph, produce a human-readable report (e.g. Markdown or HTML) with source citations and confidence. |
-| 6.3 | **Risk dashboard** | Implement `output_layer/risk_dashboard/`: composite risk score (e.g. governance, regulatory, legal, network) from evidence and confidence; optional trend or dimension breakdown. Can be CLI or a simple web view. |
+| 5.1 | **Cross-check** | Implement `reflexion_layer/cross_check/`: compare findings across agents for consistency (e.g. same entity/date, conflicting claims). Flag conflicts. |
+| 5.2 | **Gap detection** | Implement `reflexion_layer/gap_detection/`: given investigation objectives and current findings, list missing pieces (e.g. no sanctions data, no PACER). Optionally suggest follow-up queries. |
+| 5.3 | **Confidence module** | Implement `reflexion_layer/confidence_module/`: aggregate confidence from evidence; optionally adjust by source reliability. Expose per-finding or per-dimension confidence. |
+| 5.4 | **Audit trail** | Implement `output_layer/audit_trail/`: log every query, data source accessed, and reasoning step (e.g. JSON or structured log) for chain of custody. |
 
 ---
 
-### Phase 7: End-to-End Demo & Polish
+## Phase 6: Knowledge Graph & Output Layer
 
-**Goal:** Single flow that matches the PDF demo: “Investigate Company X for money laundering.”
+**Goal:** Turn verified findings into a graph and into human-readable reports and a risk dashboard.
 
 | # | Task | Description |
 |---|------|-------------|
-| 7.1 | **Demo entry point** | Single script or command: input = entity name or ID; flow = Lead Agent → task decomposition → specialist agents (Corporate, Legal, Social stubs) → reflexion (cross-check, gap detection, confidence) → knowledge graph → evidence report + risk dashboard + audit trail. |
-| 7.2 | **Timeline alignment (optional)** | If desired, align with PDF timeline: 0–30 s decomposition, 30–90 s parallel retrieval, 90–180 s analysis, 180+ s reflexion. Can be simulated or real depending on data size. |
-| 7.3 | **Documentation and README** | Update README and `docs/WALKTHROUGH.md` with: how to run the full demo, where each component lives (agents, mcp_layer, reflexion, output), and what is stub vs. implemented. |
+| 6.1 | **Knowledge graph** | Implement `knowledge_graph/`: build an in-memory (or simple persisted) graph from evidence—nodes = entities/documents, edges = relationships (e.g. has_evidence, same_source_type). |
+| 6.2 | **Evidence report generator** | Implement `output_layer/evidence_report_generator/`: produce a human-readable report (Markdown or HTML) with source citations and confidence from evidence and optional graph summary. |
+| 6.3 | **Risk dashboard** | Implement `output_layer/risk_dashboard/`: composite risk score by dimension (governance, regulatory, legal, network) from evidence and confidence; CLI or simple web view. |
+
+---
+
+## Phase 7: End-to-End Demo & Polish
+
+**Goal:** A single flow that matches the demo: “Investigate Company X for money laundering,” with optional web UI and documentation.
+
+| # | Task | Description |
+|---|------|-------------|
+| 7.1 | **Demo entry point** | Single script or command (and optionally a web app): input = investigation query; flow = Lead Agent → specialists → reflexion → knowledge graph → evidence report + risk dashboard + audit trail. |
+| 7.2 | **Timeline alignment (optional)** | If desired, align with PDF timeline (e.g. 0–30 s decomposition, 30–90 s retrieval, 90–180 s analysis, 180+ s reflexion). |
+| 7.3 | **Documentation** | Update README and docs (e.g. WALKTHROUGH) with how to run the full demo, where each component lives, and what is stub vs. implemented. |
 
 ---
 
@@ -149,13 +140,14 @@ flowchart LR
 
 ---
 
-## Suggested Order of Implementation (Checklist)
+## Order of Implementation
 
-1. **Phase 2**: MCP-style interface + wire SEC/NHTSA → evidence as canonical input.
-2. **Phase 3**: Entity resolution → task planner → context manager → Lead Agent orchestration.
-3. **Phase 4**: Corporate Agent (SEC + stub Structure Mapper) → Legal and Social stubs → common agent contract.
-4. **Phase 5**: Cross-check → gap detection → confidence module → audit trail.
-5. **Phase 6**: Knowledge graph → evidence report → risk dashboard.
-6. **Phase 7**: Demo entry point → docs/README updates.
+1. **Phase 1** — Data infrastructure (schemas, connectors, scripts, layout).
+2. **Phase 2** — MCP-style interface, wire SEC/NHTSA, evidence as canonical input.
+3. **Phase 3** — Entity resolution, task planner, context manager, Lead Agent orchestration.
+4. **Phase 4** — Corporate Agent (SEC + Structure Mapper), Legal and Social Graph agents (stubs), agent contract.
+5. **Phase 5** — Cross-check, gap detection, confidence module, audit trail.
+6. **Phase 6** — Knowledge graph, evidence report generator, risk dashboard.
+7. **Phase 7** — Demo entry point (script and/or web app), optional timeline, documentation.
 
-This order keeps dependencies consistent: data and orchestration first, then specialists, then reflexion and output, and finally the full demo and documentation.
+This order keeps dependencies consistent: data and orchestration first, then specialists, then reflexion and output, then the full demo.
