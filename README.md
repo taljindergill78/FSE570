@@ -33,8 +33,6 @@ python scripts/build_evidence_tesla.py
 
 **Output**: `data/processed/tesla/evidence_tesla.csv` (91 structured evidence rows from SEC + NHTSA).
 
-For the full walkthrough, see [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md).
-
 ## Demo (Flask)
 
 Run the web demo to investigate an entity from the browser:
@@ -72,7 +70,6 @@ See `pyproject.toml` for pytest configuration (pythonpath includes `src` and pro
 
 ## Documentation
 
-- [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) — Full walkthrough of the data pipeline and folder structure.
 - [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) — Phase-wise implementation plan (Phases 1–7).
 - [`docs/schema.md`](docs/schema.md) — Entity and Evidence schema.
 - [`docs/data_sources.md`](docs/data_sources.md) — Data sources blueprint.
