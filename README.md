@@ -4,7 +4,7 @@ This repository is the implementation for **Autonomous OSINT Investigation Swarm
 
 ## Architecture
 
-![Autonomous OSINT Investigation Swarm architecture](Architecture Diagram.jpeg)
+![Autonomous OSINT Investigation Swarm architecture](Architecture-Diagram.jpeg)
 
 ## Quickstart
 
