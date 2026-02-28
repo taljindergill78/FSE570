@@ -15,3 +15,6 @@ data/processed/
 !data/raw/**/.gitkeep
 !data/processed/**/.gitkeep
 
+# Course submission extras (do not commit)
+extras/
+
